@@ -18,7 +18,7 @@ class VOCMApMetric(mx.metric.EvalMetric):
         optional, if provided, will print out AP for each class
     """
     def __init__(self, iou_thresh=0.5, class_names=None):
-        super(VOCMApMetric, self).__init__('mAP')
+        super(VOCMApMetric, self).__init__('VOCMeanAP')
         if class_names is None:
             self.num = None
         else:
@@ -73,26 +73,36 @@ class VOCMApMetric(mx.metric.EvalMetric):
 
         Parameters
         ----------
-        pred_bboxes : mxnet.NDArray
+        pred_bboxes : mxnet.NDArray or numpy.ndarray
             Prediction bounding boxes with shape `B, N, 4`.
             Where B is the size of mini-batch, N is the number of bboxes.
-        pred_labels : mxnet.NDArray
+        pred_labels : mxnet.NDArray or numpy.ndarray
             Prediction bounding boxes labels with shape `B, N`.
-        pred_scores : mxnet.NDArray
+        pred_scores : mxnet.NDArray or numpy.ndarray
             Prediction bounding boxes scores with shape `B, N`.
-        gt_bboxes : mxnet.NDArray
+        gt_bboxes : mxnet.NDArray or numpy.ndarray
             Ground-truth bounding boxes with shape `B, M, 4`.
             Where B is the size of mini-batch, M is the number of grount-truths.
-        gt_labels : mxnet.NDArray
+        gt_labels : mxnet.NDArray or numpy.ndarray
             Ground-truth bounding boxes labels with shape `B, M`.
-        gt_difficults : mxnet.NDArray, optional
+        gt_difficults : mxnet.NDArray or numpy.ndarray, optional, default is None
             Ground-truth bounding boxes difficulty labels with shape `B, M`.
 
         """
+        def as_numpy(a):
+            """Convert a (list of) mx.NDArray into numpy.ndarray"""
+            if isinstance(a, (list, tuple)):
+                out = [x.asnumpy() if isinstance(x, mx.nd.NDArray) else x for x in a]
+                return np.concatenate(out, axis=0)
+            elif isinstance(a, mx.NDArray):
+                a = a.asnumpy()
+            return a
+
         if gt_difficults is None:
             gt_difficults = [None for _ in gt_labels]
+
         for pred_bbox, pred_label, pred_score, gt_bbox, gt_label, gt_difficult in zip(
-                *[x.asnumpy() for x in [pred_bboxes, pred_labels, pred_scores,
+                *[as_numpy(x) for x in [pred_bboxes, pred_labels, pred_scores,
                                         gt_bboxes, gt_labels, gt_difficults]]):
             # strip padding -1 for pred and gt
             valid_pred = np.where(pred_label.flat >= 0)[0]

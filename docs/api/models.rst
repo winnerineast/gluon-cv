@@ -82,68 +82,41 @@ Semantic Segmentation
 
 .. autofunction:: get_fcn_voc_resnet101
 
-Dilated Network
----------------
+.. autofunction:: get_fcn_ade_resnet50
+
+
+:hidden:`ResNetV1b`
+-------------------
 
 We apply dilattion strategy to pre-trained ResNet models (with stride of 8). Please see :class:`gluoncv.model_zoo.SegBaseModel` for how to use it.
 
+.. currentmodule:: gluoncv.model_zoo.resnetv1b
 
-:hidden:`DilatedResNetV0`
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. currentmodule:: gluoncv.model_zoo.dilated.dilatedresnetv0
-
-.. autoclass:: DilatedResNetV0
+.. autoclass:: ResNetV1b
     :members:
 
-.. autofunction:: dilated_resnet18
+.. autofunction:: resnet18_v1b
 
 
-.. autofunction:: dilated_resnet34
+.. autofunction:: resnet34_v1b
 
 
-.. autofunction:: dilated_resnet50
+.. autofunction:: resnet50_v1b
 
 
-.. autofunction:: dilated_resnet101
+.. autofunction:: resnet101_v1b
 
 
-.. autofunction:: dilated_resnet152
+.. autofunction:: resnet152_v1b
 
 
-:hidden:`DilatedResNetV2`
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. currentmodule:: gluoncv.model_zoo.dilated.dilatedresnetv2
-
-.. autoclass:: DilatedResNetV2
-    :members:
-
-.. autofunction:: get_dilated_resnet
-
-
-.. autofunction:: dilated_resnet18
-
-
-.. autofunction:: dilated_resnet34
-
-
-.. autofunction:: dilated_resnet50
-
-
-.. autofunction:: dilated_resnet101
-
-
-.. autofunction:: dilated_resnet152
-
-
-Common Components
------------------
+Neural Networks
+---------------
 
 :hidden:`Bounding Box`
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. currentmodule:: gluoncv.model_zoo.bbox
+.. currentmodule:: gluoncv.nn.bbox
 
 .. autoclass:: BBoxCornerToCenter
     :members:
@@ -154,7 +127,7 @@ Common Components
 :hidden:`Coders`
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. currentmodule:: gluoncv.model_zoo.coders
+.. currentmodule:: gluoncv.nn.coder
 
 .. autoclass:: NormalizedBoxCenterEncoder
     :members:
@@ -175,7 +148,7 @@ Common Components
 :hidden:`Features`
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. currentmodule:: gluoncv.model_zoo.features
+.. currentmodule:: gluoncv.nn.feature
 
 .. autoclass:: FeatureExtractor
     :members:
@@ -186,7 +159,7 @@ Common Components
 :hidden:`Losses`
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. currentmodule:: gluoncv.model_zoo.losses
+.. currentmodule:: gluoncv.loss
 
 .. autoclass:: FocalLoss
     :members:
@@ -195,7 +168,7 @@ Common Components
 :hidden:`Matchers`
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. currentmodule:: gluoncv.model_zoo.matchers
+.. currentmodule:: gluoncv.utils.nn.matcher
 
 .. autoclass:: CompositeMatcher
     :members:
@@ -209,7 +182,7 @@ Common Components
 :hidden:`Predictors`
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. currentmodule:: gluoncv.model_zoo.predictors
+.. currentmodule:: gluoncv.model_zoo.nn.predictor
 
 .. autoclass:: ConvPredictor
     :members:
@@ -220,7 +193,7 @@ Common Components
 :hidden:`Samplers`
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. currentmodule:: gluoncv.model_zoo.samplers
+.. currentmodule:: gluoncv.utils.nn.sampler
 
 .. autoclass:: NaiveSampler
     :members:

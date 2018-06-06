@@ -2,21 +2,24 @@
 import math
 import numpy as np
 import mxnet as mx
-from mxnet import gluon
 from mxnet.ndarray import NDArray
 from mxnet.gluon.nn import HybridBlock
+from mxnet.gluon.loss import Loss, _apply_weighting
 from ..utils.metrics import voc_segmentation
 from ..utils.parallel import parallel_apply
-from .dilated import dilatedresnetv0
-# pylint: disable=abstract-method,arguments-differ,dangerous-default-value
+from .resnetv1b import resnet50_v1b, resnet101_v1b, resnet152_v1b
+from ..utils.parallel import tuple_map
+# pylint: disable=abstract-method,arguments-differ,dangerous-default-value,missing-docstring
 
 __all__ = ['get_segmentation_model', 'SegBaseModel', 'SegEvalModel', 'MultiEvalModel',
            'SoftmaxCrossEntropyLossWithAux']
 
 def get_segmentation_model(model, **kwargs):
     from .fcn import get_fcn
+    from .pspnet import get_psp
     models = {
         'fcn': get_fcn,
+        'psp': get_psp,
     }
     return models[model](**kwargs)
 
@@ -33,17 +36,17 @@ class SegBaseModel(HybridBlock):
         for Synchronized Cross-GPU BachNormalization).
     """
     # pylint : disable=arguments-differ
-    def __init__(self, nclass, aux, backbone='resnet50', **kwargs):
+    def __init__(self, nclass, aux, backbone='resnet50', height=480, width=480, **kwargs):
         super(SegBaseModel, self).__init__()
         self.aux = aux
         self.nclass = nclass
         with self.name_scope():
             if backbone == 'resnet50':
-                pretrained = dilatedresnetv0.dilated_resnet50(pretrained=True, **kwargs)
+                pretrained = resnet50_v1b(pretrained=True, dilated=True, **kwargs)
             elif backbone == 'resnet101':
-                pretrained = dilatedresnetv0.dilated_resnet101(pretrained=True, **kwargs)
+                pretrained = resnet101_v1b(pretrained=True, dilated=True, **kwargs)
             elif backbone == 'resnet152':
-                pretrained = dilatedresnetv0.dilated_resnet152(pretrained=True, **kwargs)
+                pretrained = resnet152_v1b(pretrained=True, dilated=True, **kwargs)
             else:
                 raise RuntimeError('unknown backbone: {}'.format(backbone))
             self.conv1 = pretrained.conv1
@@ -54,6 +57,7 @@ class SegBaseModel(HybridBlock):
             self.layer2 = pretrained.layer2
             self.layer3 = pretrained.layer3
             self.layer4 = pretrained.layer4
+        self._up_kwargs = {'height': height, 'width': width}
 
     def base_forward(self, x):
         """forwarding pre-trained network"""
@@ -82,13 +86,37 @@ class SegBaseModel(HybridBlock):
         return correct, labeled, inter, union
 
 
-class SoftmaxCrossEntropyLossWithAux(gluon.loss.SoftmaxCrossEntropyLoss):
+class SoftmaxCrossEntropyLoss(Loss):
+    """SoftmaxCrossEntropyLoss with ignore labels"""
+    def __init__(self, axis=1, sparse_label=True, from_logits=False, weight=None,
+                 batch_axis=0, ignore_label=-1, **kwargs):
+        super(SoftmaxCrossEntropyLoss, self).__init__(weight, batch_axis, **kwargs)
+        self._axis = axis
+        self._sparse_label = sparse_label
+        self._from_logits = from_logits
+        self._ignore_label = ignore_label
+
+    def hybrid_forward(self, F, output, label, sample_weight=None):
+        if not self._from_logits:
+            output = F.log_softmax(output, axis=self._axis)
+        if self._sparse_label:
+            valid_label_map = (label != self._ignore_label).astype('float32')
+            loss = -(F.pick(output, label, axis=self._axis, keepdims=True) * valid_label_map)
+        else:
+            label = _reshape_like(F, label, pred)
+            loss = -F.sum(pred*label, axis=self._axis, keepdims=True)
+        loss = _apply_weighting(F, loss, self._weight, sample_weight)
+        return F.mean(loss, axis=self._batch_axis, exclude=True) * \
+            valid_label_map.size / F.sum(valid_label_map)
+
+
+class SoftmaxCrossEntropyLossWithAux(SoftmaxCrossEntropyLoss):
     """SoftmaxCrossEntropyLoss2D with Auxilary Loss"""
     def __init__(self, aux=True, aux_weight=0.2, ignore_label=-1, **kwargs):
-        super(SoftmaxCrossEntropyLossWithAux, self).__init__(axis=1, **kwargs)
+        super(SoftmaxCrossEntropyLossWithAux, self).__init__(
+            axis=1, ignore_label=ignore_label, **kwargs)
         self.aux = aux
         self.aux_weight = aux_weight
-        self._ignore_label = ignore_label
 
     def aux_forward(self, F, pred1, pred2, label, **kwargs):
         loss1 = super(SoftmaxCrossEntropyLossWithAux, self). \
@@ -98,12 +126,11 @@ class SoftmaxCrossEntropyLossWithAux(gluon.loss.SoftmaxCrossEntropyLoss):
         return loss1 + self.aux_weight * loss2
 
     def hybrid_forward(self, F, *inputs, **kwargs):
-        sample_weight = (inputs[-1].astype('float32') != self._ignore_label)
         if self.aux:
-            return self.aux_forward(F, *inputs, sample_weight=sample_weight, **kwargs)
+            return self.aux_forward(F, *inputs, **kwargs)
         else:
             return super(SoftmaxCrossEntropyLossWithAux, self). \
-                hybrid_forward(F, *inputs, sample_weight=sample_weight, **kwargs)
+                hybrid_forward(F, *inputs, **kwargs)
 
 
 class SegEvalModel(object):
@@ -133,9 +160,10 @@ class MultiEvalModel(object):
         self.evalmodule = SegEvalModel(module)
 
     def parallel_forward(self, inputs):
-        inputs = [x.as_in_context(ctx) for (x, ctx) in zip(inputs, self.ctx_list)]
+        inputs = tuple([tuple([x.as_in_context(ctx)])
+                        for (x, ctx) in zip(inputs, self.ctx_list)])
         if len(self.ctx_list) == 1:
-            return self(*inputs[0])
+            return tuple_map(self(*inputs[0]))
         return parallel_apply(self, inputs, sync=True)
 
     def __call__(self, image):
@@ -160,7 +188,7 @@ class MultiEvalModel(object):
                 short_size = height
             # resize image to current size
             cur_img = _resize_image(image, height, width)
-            if scale <= 1.25 or long_size <= crop_size:# #
+            if long_size <= crop_size:
                 pad_img = _pad_image(cur_img, crop_size)
                 outputs = self.flip_inference(pad_img)
                 outputs = _crop_image(outputs, 0, height, 0, width)

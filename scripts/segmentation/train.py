@@ -59,6 +59,8 @@ def parse_args():
                         help='put the path to resuming file if needed')
     parser.add_argument('--checkname', type=str, default='default',
                         help='set the checkpoint name')
+    parser.add_argument('--model-zoo', type=str, default=None,
+                        help='evaluating on model zoo model')
     # evaluation only
     parser.add_argument('--eval', action='store_true', default= False,
                         help='evaluation only')
@@ -81,9 +83,6 @@ def parse_args():
         args.norm_layer = BatchNorm
     else:
         args.norm_layer = mx.gluon.nn.BatchNorm
-    # check resuming
-    if args.eval and args.resume is None:
-        raise RuntimeError('checkpoint must be provided for eval or test')
     return args
 
 
@@ -186,11 +185,12 @@ def save_checkpoint(net, args, is_best=False):
 if __name__ == "__main__":
     args = parse_args()
     trainer = Trainer(args)
-    if not args.eval:
+    if args.eval:
+        print('Evaluating model: ', args.resume)
+        trainer.validation(args.start_epoch)
+    else:
         print('Starting Epoch:', args.start_epoch)
         print('Total Epoches:', args.epochs)
         for epoch in range(args.start_epoch, args.epochs):
             trainer.training(epoch)
             trainer.validation(epoch)
-    print('Evaluating model: ', args.resume)
-    trainer.validation(args.start_epoch)

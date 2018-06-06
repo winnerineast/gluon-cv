@@ -41,7 +41,7 @@ import gluoncv
 #     :width: 70%
 #     :align: center
 #
-# (figure redit to `Long et al. <https://arxiv.org/pdf/1411.4038.pdf>`_ )
+# (figure credit to `Long et al. <https://arxiv.org/pdf/1411.4038.pdf>`_ )
 # 
 # State-of-the-art approaches of semantic segmentation are typically based on
 # Fully Convolutional Network (FCN) [Long15]_.
@@ -65,7 +65,7 @@ import gluoncv
 # we apply dilation strategy to the
 # stage 3 and stage 4 of the pre-trained networks, which produces stride of 8
 # featuremaps (models are provided in
-# :class:`gluoncv.model_zoo.dilatedresnetv0.DilatedResNetV0`).
+# :class:`gluoncv.model_zoo.ResNetV1b`).
 # Visualization of dilated/atrous convoution
 # (figure credit to `conv_arithmetic <https://github.com/vdumoulin/conv_arithmetic>`_ ):
 # 
@@ -75,7 +75,7 @@ import gluoncv
 # 
 # Loading a dilated ResNet50 is simply:
 # 
-pretrained_net = gluoncv.model_zoo.dilatedresnetv0.dilated_resnet50(pretrained=True)
+pretrained_net = gluoncv.model_zoo.resnet50_v1b(pretrained=True)
 
 ##############################################################################
 # For convenience, we provide a base model for semantic segmentation, which automatically
@@ -133,10 +133,12 @@ input_transform = transforms.Compose([
 # For example, we can easily get the Pascal VOC 2012 dataset:
 trainset = gluoncv.data.VOCSegmentation(split='train', transform=input_transform)
 print('Training images:', len(trainset))
+# set batch_size = 4 for toy example
+batch_size = 4
 # Create Training Loader
 train_data = gluon.data.DataLoader(
-    trainset, 4, shuffle=True, last_batch='rollover',
-    num_workers=4)
+    trainset, batch_size, shuffle=True, last_batch='rollover',
+    num_workers=batch_size)
 
 ##############################################################################
 # For data augmentation, 
@@ -148,8 +150,10 @@ train_data = gluon.data.DataLoader(
 # Finally a random Gaussian blurring is applied.
 #
 # Random pick one example for visualization:
-from random import randint
-idx = randint(0, len(trainset))
+import random
+from datetime import datetime
+random.seed(datetime.now())
+idx = random.randint(0, len(trainset))
 img, mask = trainset[idx]
 from gluoncv.utils.viz import get_color_pallete, DeNormalize
 # get color pallete for visualize mask
@@ -201,9 +205,9 @@ lr_scheduler = gluoncv.utils.PolyLRScheduler(0.001, niters=len(train_data),
                                                  nepochs=50)
 
 ##############################################################################
-# - Dataparallel for multi-gpu training
+# - Dataparallel for multi-gpu training, using cpu for demo only
 from gluoncv.utils.parallel import *
-ctx_list = [mx.gpu(0), mx.gpu(1)]
+ctx_list = [mx.cpu(0)]
 model = DataParallelModel(model, ctx_list)
 criterion = DataParallelCriterion(criterion, ctx_list)
 
@@ -230,12 +234,12 @@ for i, (data, target) in enumerate(train_data):
         losses = criterion(outputs, target)
         mx.nd.waitall()
         autograd.backward(losses)
-    optimizer.step(4)
+    optimizer.step(batch_size)
     for loss in losses:
         train_loss += loss.asnumpy()[0] / len(losses)
     print('Epoch %d, training loss %.3f'%(epoch, train_loss/(i+1)))
     # just demo for 20 iters
-    if i > 20:
+    if i > 10:
         break
 
 

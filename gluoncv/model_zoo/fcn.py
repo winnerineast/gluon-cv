@@ -1,13 +1,13 @@
 """Fully Convolutional Network with Strdie of 8"""
 from __future__ import division
 from mxnet.gluon import nn
-import mxnet.ndarray as F
 from mxnet.context import cpu
 from mxnet.gluon.nn import HybridBlock
 from .segbase import SegBaseModel
 # pylint: disable=unused-argument,abstract-method,missing-docstring
 
-__all__ = ['FCN', 'get_fcn', 'get_fcn_voc_resnet50', 'get_fcn_voc_resnet101']
+__all__ = ['FCN', 'get_fcn', 'get_fcn_voc_resnet50', 'get_fcn_voc_resnet101',
+           'get_fcn_ade_resnet50']
 
 class FCN(SegBaseModel):
     r"""Fully Convolutional Networks for Semantic Segmentation
@@ -35,29 +35,28 @@ class FCN(SegBaseModel):
     """
     # pylint: disable=arguments-differ
     def __init__(self, nclass, backbone='resnet50', norm_layer=nn.BatchNorm,
-                 aux=True, **kwargs):
-        super(FCN, self).__init__(nclass, aux, backbone, norm_layer=norm_layer, **kwargs)
+                 aux=True, ctx=cpu(), **kwargs):
+        super(FCN, self).__init__(nclass, aux, backbone, ctx=ctx, norm_layer=norm_layer, **kwargs)
         with self.name_scope():
             self.head = _FCNHead(2048, nclass, norm_layer=norm_layer, **kwargs)
-            self.head.initialize()
+            self.head.initialize(ctx=ctx)
             self.head.collect_params().setattr('lr_mult', 10)
             if self.aux:
                 self.auxlayer = _FCNHead(1024, nclass, norm_layer=norm_layer, **kwargs)
-                self.auxlayer.initialize()
+                self.auxlayer.initialize(ctx=ctx)
                 self.auxlayer.collect_params().setattr('lr_mult', 10)
 
-    def forward(self, x):
-        _, _, H, W = x.shape
+    def hybrid_forward(self, F, x):
         c3, c4 = self.base_forward(x)
 
         outputs = []
         x = self.head(c4)
-        x = F.contrib.BilinearResize2D(x, height=H, width=W)
+        x = F.contrib.BilinearResize2D(x, **self._up_kwargs)
         outputs.append(x)
 
         if self.aux:
             auxout = self.auxlayer(c3)
-            auxout = F.contrib.BilinearResize2D(auxout, height=H, width=W)
+            auxout = F.contrib.BilinearResize2D(auxout, **self._up_kwargs)
             outputs.append(auxout)
             return tuple(outputs)
         else:
@@ -106,14 +105,18 @@ def get_fcn(dataset='pascal_voc', backbone='resnet50', pretrained=False,
     >>> model = get_fcn(dataset='pascal_voc', backbone='resnet50', pretrained=False)
     >>> print(model)
     """
+    from ..data.pascal_voc.segmentation import VOCSegmentation
+    from ..data.ade20k.segmentation import ADE20KSegmentation
     acronyms = {
         'pascal_voc': 'voc',
         'ade20k': 'ade',
     }
+    datasets = {
+        'pascal_voc': VOCSegmentation,
+        'ade20k': ADE20KSegmentation,
+    }
     # infer number of classes
-    from ..data.segbase import get_segmentation_dataset
-    data = get_segmentation_dataset(dataset)
-    model = FCN(data.num_class, backbone=backbone, **kwargs)
+    model = FCN(datasets[dataset].NUM_CLASS, backbone=backbone, ctx=ctx, **kwargs)
     if pretrained:
         from .model_store import get_model_file
         model.load_params(get_model_file('fcn_%s_%s'%(backbone, acronyms[dataset]),
@@ -161,3 +164,24 @@ def get_fcn_voc_resnet101(**kwargs):
     >>> print(model)
     """
     return get_fcn('pascal_voc', 'resnet101', **kwargs)
+
+def get_fcn_ade_resnet50(**kwargs):
+    r"""FCN model with base network ResNet-50 pre-trained on ADE20K dataset
+    from the paper `"Fully Convolutional Network for semantic segmentation"
+    <https://people.eecs.berkeley.edu/~jonlong/long_shelhamer_fcn.pdf>`_
+
+    Parameters
+    ----------
+    pretrained : bool, default False
+        Whether to load the pretrained weights for model.
+    ctx : Context, default CPU
+        The context in which to load the pretrained weights.
+    root : str, default '~/.mxnet/models'
+        Location for keeping the model parameters.
+
+    Examples
+    --------
+    >>> model = get_fcn_ade_resnet50(pretrained=True)
+    >>> print(model)
+    """
+    return get_fcn('ade20k', 'resnet50', **kwargs)
