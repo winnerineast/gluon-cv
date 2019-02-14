@@ -23,7 +23,7 @@ class VOCDetection(VisionDataset):
         List of combinations of (year, name)
         For years, candidates can be: 2007, 2012.
         For names, candidates can be: 'train', 'val', 'trainval', 'test'.
-    transform : callable, defaut None
+    transform : callable, default None
         A function that takes data and label and transforms them. Refer to
         :doc:`./transforms` for examples.
 
@@ -32,13 +32,13 @@ class VOCDetection(VisionDataset):
     index_map : dict, default None
         In default, the 20 classes are mapped into indices from 0 to 19. We can
         customize it by providing a str to int dict specifying how to map class
-        names to indicies. Use by advanced users only, when you want to swap the orders
+        names to indices. Use by advanced users only, when you want to swap the orders
         of class labels.
     preload_label : bool, default True
         If True, then parse and load all labels into memory during
         initialization. It often accelerate speed but require more memory
         usage. Typical preloaded labels took tens of MB. You only need to disable it
-        when your dataset is extreamly large.
+        when your dataset is extremely large.
     """
     CLASSES = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
                'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike',
@@ -121,14 +121,10 @@ class VOCDetection(VisionDataset):
 
     def _validate_label(self, xmin, ymin, xmax, ymax, width, height):
         """Validate labels."""
-        assert xmin >= 0 and xmin < width, (
-            "xmin must in [0, {}), given {}".format(width, xmin))
-        assert ymin >= 0 and ymin < height, (
-            "ymin must in [0, {}), given {}".format(height, ymin))
-        assert xmax > xmin and xmax <= width, (
-            "xmax must in (xmin, {}], given {}".format(width, xmax))
-        assert ymax > ymin and ymax <= height, (
-            "ymax must in (ymin, {}], given {}".format(height, ymax))
+        assert 0 <= xmin < width, "xmin must in [0, {}), given {}".format(width, xmin)
+        assert 0 <= ymin < height, "ymin must in [0, {}), given {}".format(height, ymin)
+        assert xmin < xmax <= width, "xmax must in (xmin, {}], given {}".format(width, xmax)
+        assert ymin < ymax <= height, "ymax must in (ymin, {}], given {}".format(height, ymax)
 
     def _preload_labels(self):
         """Preload all labels into memory."""

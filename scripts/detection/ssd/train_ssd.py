@@ -2,6 +2,7 @@
 import argparse
 import os
 import logging
+import warnings
 import time
 import numpy as np
 import mxnet as mx
@@ -12,6 +13,7 @@ import gluoncv as gcv
 from gluoncv import data as gdata
 from gluoncv import utils as gutils
 from gluoncv.model_zoo import get_model
+from gluoncv.data.batchify import Tuple, Stack, Pad
 from gluoncv.data.transforms.presets.ssd import SSDDefaultTrainTransform
 from gluoncv.data.transforms.presets.ssd import SSDDefaultValTransform
 from gluoncv.utils.metrics.voc_detection import VOC07MApMetric
@@ -46,7 +48,7 @@ def parse_args():
     parser.add_argument('--lr-decay', type=float, default=0.1,
                         help='decay rate of learning rate. default is 0.1.')
     parser.add_argument('--lr-decay-epoch', type=str, default='160,200',
-                        help='epoches at which learning rate decays. default is 160,200.')
+                        help='epochs at which learning rate decays. default is 160,200.')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='SGD momentum, default is 0.9')
     parser.add_argument('--wd', type=float, default=0.0005,
@@ -62,6 +64,8 @@ def parse_args():
                              'training time if validation is slow.')
     parser.add_argument('--seed', type=int, default=233,
                         help='Random seed to be fixed.')
+    parser.add_argument('--syncbn', action='store_true',
+                        help='Use synchronize BN across devices.')
     args = parser.parse_args()
     return args
 
@@ -74,8 +78,10 @@ def get_dataset(dataset, args):
         val_metric = VOC07MApMetric(iou_thresh=0.5, class_names=val_dataset.classes)
     elif dataset.lower() == 'coco':
         train_dataset = gdata.COCODetection(splits='instances_train2017')
-        val_dataset = gdata.COCODetection(splits='instances_val2017')
-        val_metric = COCODetectionMetric(val_dataset, args.save_prefix + '_eval', cleanup=False)
+        val_dataset = gdata.COCODetection(splits='instances_val2017', skip_empty=False)
+        val_metric = COCODetectionMetric(
+            val_dataset, args.save_prefix + '_eval', cleanup=True,
+            data_shape=(args.data_shape, args.data_shape))
         # coco validation is slow, consider increase the validation interval
         if args.val_interval == 1:
             args.val_interval = 10
@@ -89,12 +95,14 @@ def get_dataloader(net, train_dataset, val_dataset, data_shape, batch_size, num_
     # use fake data to generate fixed anchors for target generation
     with autograd.train_mode():
         _, _, anchors = net(mx.nd.zeros((1, 3, height, width)))
-    train_loader = gdata.DetectionDataLoader(
+    batchify_fn = Tuple(Stack(), Stack(), Stack())  # stack image, cls_targets, box_targets
+    train_loader = gluon.data.DataLoader(
         train_dataset.transform(SSDDefaultTrainTransform(width, height, anchors)),
-        batch_size, True, last_batch='rollover', num_workers=num_workers)
-    val_loader = gdata.DetectionDataLoader(
+        batch_size, True, batchify_fn=batchify_fn, last_batch='rollover', num_workers=num_workers)
+    val_batchify_fn = Tuple(Stack(), Pad(pad_val=-1))
+    val_loader = gluon.data.DataLoader(
         val_dataset.transform(SSDDefaultValTransform(width, height)),
-        batch_size, False, last_batch='keep', num_workers=num_workers)
+        batch_size, False, batchify_fn=val_batchify_fn, last_batch='keep', num_workers=num_workers)
     return train_loader, val_loader
 
 def save_params(net, best_map, current_map, epoch, save_interval, prefix):
@@ -103,7 +111,7 @@ def save_params(net, best_map, current_map, epoch, save_interval, prefix):
         best_map[0] = current_map
         net.save_params('{:s}_best.params'.format(prefix, epoch, current_map))
         with open(prefix+'_best_map.log', 'a') as f:
-            f.write('\n{:04d}:\t{:.4f}'.format(epoch, current_map))
+            f.write('{:04d}:\t{:.4f}\n'.format(epoch, current_map))
     if save_interval and epoch % save_interval == 0:
         net.save_params('{:s}_{:04d}_{:.4f}.params'.format(prefix, epoch, current_map))
 
@@ -114,8 +122,8 @@ def validate(net, val_data, ctx, eval_metric):
     net.set_nms(nms_thresh=0.45, nms_topk=400)
     net.hybridize()
     for batch in val_data:
-        data = gluon.utils.split_and_load(batch[0], ctx_list=ctx, batch_axis=0)
-        label = gluon.utils.split_and_load(batch[1], ctx_list=ctx, batch_axis=0)
+        data = gluon.utils.split_and_load(batch[0], ctx_list=ctx, batch_axis=0, even_split=False)
+        label = gluon.utils.split_and_load(batch[1], ctx_list=ctx, batch_axis=0, even_split=False)
         det_bboxes = []
         det_ids = []
         det_scores = []
@@ -138,7 +146,7 @@ def validate(net, val_data, ctx, eval_metric):
         eval_metric.update(det_bboxes, det_ids, det_scores, gt_bboxes, gt_ids, gt_difficults)
     return eval_metric.get()
 
-def train(net, train_data, val_data, eval_metric, args):
+def train(net, train_data, val_data, eval_metric, ctx, args):
     """Training pipeline"""
     net.collect_params().reset_ctx(ctx)
     trainer = gluon.Trainer(
@@ -208,7 +216,7 @@ def train(net, train_data, val_data, eval_metric, args):
         name2, loss2 = smoothl1_metric.get()
         logger.info('[Epoch {}] Training cost: {:.3f}, {}={:.3f}, {}={:.3f}'.format(
             epoch, (time.time()-tic), name1, loss1, name2, loss2))
-        if not (epoch + 1) % args.val_interval:
+        if (epoch % args.val_interval == 0) or (args.save_interval and epoch % args.save_interval == 0):
             # consider reduce the frequency of validation to save time
             map_name, mean_ap = validate(net, val_data, ctx, eval_metric)
             val_msg = '\n'.join(['{}={}'.format(k, v) for k, v in zip(map_name, mean_ap)])
@@ -230,19 +238,26 @@ if __name__ == '__main__':
     # network
     net_name = '_'.join(('ssd', str(args.data_shape), args.network, args.dataset))
     args.save_prefix += net_name
-    net = get_model(net_name, pretrained_base=True)
-    if args.resume.strip():
-        net.load_params(args.resume.strip())
+    if args.syncbn and len(ctx) > 1:
+        net = get_model(net_name, pretrained_base=True, norm_layer=gluon.contrib.nn.SyncBatchNorm,
+                        norm_kwargs={'num_devices': len(ctx)})
+        async_net = get_model(net_name, pretrained_base=False)  # used by cpu worker
     else:
-        for param in net.collect_params().values():
-            if param._data is not None:
-                continue
-            param.initialize()
+        net = get_model(net_name, pretrained_base=True, norm_layer=gluon.nn.BatchNorm)
+        async_net = net
+    if args.resume.strip():
+        net.load_parameters(args.resume.strip())
+        async_net.load_parameters(args.resume.strip())
+    else:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            net.initialize()
+            async_net.initialize()
 
     # training data
     train_dataset, val_dataset, eval_metric = get_dataset(args.dataset, args)
     train_data, val_data = get_dataloader(
-        net, train_dataset, val_dataset, args.data_shape, args.batch_size, args.num_workers)
+        async_net, train_dataset, val_dataset, args.data_shape, args.batch_size, args.num_workers)
 
     # training
-    train(net, train_data, val_data, eval_metric, args)
+    train(net, train_data, val_data, eval_metric, ctx, args)

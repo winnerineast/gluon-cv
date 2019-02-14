@@ -25,7 +25,7 @@ class VOCAugSegmentation(SegmentationDataset):
     >>>     transforms.Normalize([.485, .456, .406], [.229, .224, .225]),
     >>> ])
     >>> # Create Dataset
-    >>> trainset = gluonvision.data.VOCAugSegmentation(split='train', transform=input_transform)
+    >>> trainset = gluoncv.data.VOCAugSegmentation(split='train', transform=input_transform)
     >>> # Create Training Loader
     >>> train_data = gluon.data.DataLoader(
     >>>     trainset, 4, shuffle=True, last_batch='rollover',
@@ -34,8 +34,8 @@ class VOCAugSegmentation(SegmentationDataset):
     TRAIN_BASE_DIR = 'VOCaug/dataset/'
     NUM_CLASS = 21
     def __init__(self, root=os.path.expanduser('~/.mxnet/datasets/voc'),
-                 split='train', mode=None, transform=None):
-        super(VOCAugSegmentation, self).__init__(root, split, mode, transform)
+                 split='train', mode=None, transform=None, **kwargs):
+        super(VOCAugSegmentation, self).__init__(root, split, mode, transform, **kwargs)
         # train/val/test splits are pre-cut
         _voc_root = os.path.join(root, self.TRAIN_BASE_DIR)
         _mask_dir = os.path.join(_voc_root, 'cls')

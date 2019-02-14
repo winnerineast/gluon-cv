@@ -3,8 +3,8 @@ from __future__ import absolute_import
 
 from mxnet import nd
 from mxnet.gluon import Block
-from ...utils.nn.matcher import CompositeMatcher, BipartiteMatcher, MaximumMatcher
-from ...utils.nn.sampler import OHEMSampler, NaiveSampler
+from ...nn.matcher import CompositeMatcher, BipartiteMatcher, MaximumMatcher
+from ...nn.sampler import OHEMSampler, NaiveSampler
 from ...nn.coder import MultiClassEncoder, NormalizedBoxCenterEncoder
 from ...nn.bbox import BBoxCenterToCorner
 
@@ -26,7 +26,8 @@ class SSDTargetGenerator(Block):
     def __init__(self, iou_thresh=0.5, neg_thresh=0.5, negative_mining_ratio=3,
                  stds=(0.1, 0.1, 0.2, 0.2), **kwargs):
         super(SSDTargetGenerator, self).__init__(**kwargs)
-        self._matcher = CompositeMatcher([BipartiteMatcher(), MaximumMatcher(iou_thresh)])
+        self._matcher = CompositeMatcher(
+            [BipartiteMatcher(share_max=False), MaximumMatcher(iou_thresh)])
         if negative_mining_ratio > 0:
             self._sampler = OHEMSampler(negative_mining_ratio, thresh=neg_thresh)
             self._use_negative_sampling = True

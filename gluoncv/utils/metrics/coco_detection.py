@@ -2,7 +2,10 @@
 from __future__ import absolute_import
 
 import sys
-import io
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 import os
 from os import path as osp
 import warnings
@@ -27,9 +30,15 @@ class COCODetectionMetric(mx.metric.EvalMetric):
     score_thresh : float
         Detection results with confident scores smaller than ``score_thresh`` will
         be discarded before saving to results.
+    data_shape : tuple of int, default is None
+        If `data_shape` is provided as (height, width), we will rescale bounding boxes when
+        saving the predictions.
+        This is helpful when SSD/YOLO box predictions cannot be rescaled conveniently. Note that
+        the data_shape must be fixed for all validation images.
 
     """
-    def __init__(self, dataset, save_prefix, use_time=True, cleanup=False, score_thresh=0.05):
+    def __init__(self, dataset, save_prefix, use_time=True, cleanup=False, score_thresh=0.05,
+                 data_shape=None):
         super(COCODetectionMetric, self).__init__('COCOMeanAP')
         self.dataset = dataset
         self._img_ids = sorted(dataset.coco.getImgIds())
@@ -37,6 +46,14 @@ class COCODetectionMetric(mx.metric.EvalMetric):
         self._cleanup = cleanup
         self._results = []
         self._score_thresh = score_thresh
+        if isinstance(data_shape, (tuple, list)):
+            assert len(data_shape) == 2, "Data shape must be (height, width)"
+        elif not data_shape:
+            data_shape = None
+        else:
+            raise ValueError("data_shape must be None or tuple of int as (height, width)")
+        self._data_shape = data_shape
+
         if use_time:
             import datetime
             t = datetime.datetime.now().strftime('_%Y_%m_%d_%H_%M_%S')
@@ -65,8 +82,14 @@ class COCODetectionMetric(mx.metric.EvalMetric):
         """Use coco to get real scores. """
         if not self._current_id == len(self._img_ids):
             warnings.warn(
-                'Recorded {} out of {} validation images, incompelete results'.format(
+                'Recorded {} out of {} validation images, incomplete results'.format(
                     self._current_id, len(self._img_ids)))
+        if not self._results:
+            # in case of empty results, push a dummy result
+            self._results.append({'image_id': self._img_ids[0],
+                                  'category_id': 0,
+                                  'bbox': [0, 0, 0, 0],
+                                  'score': 0})
         import json
         try:
             with open(self._filename, 'w') as f:
@@ -96,7 +119,11 @@ class COCODetectionMetric(mx.metric.EvalMetric):
             return ind
 
         # call real update
-        coco_eval = self._update()
+        try:
+            coco_eval = self._update()
+        except IndexError:
+            # invalid model may result in empty JSON results, skip it
+            return ['mAP',], ['0.0',]
 
         IoU_lo_thresh = 0.5
         IoU_hi_thresh = 0.95
@@ -111,7 +138,7 @@ class COCODetectionMetric(mx.metric.EvalMetric):
         names.append('~~~~ Summary metrics ~~~~\n')
         # catch coco print string, don't want directly print here
         _stdout = sys.stdout
-        sys.stdout = io.StringIO()
+        sys.stdout = StringIO()
         coco_eval.summarize()
         coco_summary = sys.stdout.getvalue()
         sys.stdout = _stdout
@@ -145,9 +172,17 @@ class COCODetectionMetric(mx.metric.EvalMetric):
             Prediction bounding boxes scores with shape `B, N`.
 
         """
+        def as_numpy(a):
+            """Convert a (list of) mx.NDArray into numpy.ndarray"""
+            if isinstance(a, (list, tuple)):
+                out = [x.asnumpy() if isinstance(x, mx.nd.NDArray) else x for x in a]
+                return np.concatenate(out, axis=0)
+            elif isinstance(a, mx.nd.NDArray):
+                a = a.asnumpy()
+            return a
+
         for pred_bbox, pred_label, pred_score in zip(
-                *[x.asnumpy() if isinstance(x, mx.nd.NDArray) else x
-                  for x in [pred_bboxes, pred_labels, pred_scores]]):
+                *[as_numpy(x) for x in [pred_bboxes, pred_labels, pred_scores]]):
             valid_pred = np.where(pred_label.flat >= 0)[0]
             pred_bbox = pred_bbox[valid_pred, :].astype(np.float)
             pred_label = pred_label.flat[valid_pred].astype(int)
@@ -155,6 +190,14 @@ class COCODetectionMetric(mx.metric.EvalMetric):
 
             imgid = self._img_ids[self._current_id]
             self._current_id += 1
+            if self._data_shape is not None:
+                entry = self.dataset.coco.loadImgs(imgid)[0]
+                orig_height = entry['height']
+                orig_width = entry['width']
+                height_scale = float(orig_height) / self._data_shape[0]
+                width_scale = float(orig_width) / self._data_shape[1]
+            else:
+                height_scale, width_scale = (1., 1.)
             # for each bbox detection in each image
             for bbox, label, score in zip(pred_bbox, pred_label, pred_score):
                 if label not in self.dataset.contiguous_id_to_json:
@@ -163,6 +206,9 @@ class COCODetectionMetric(mx.metric.EvalMetric):
                 if score < self._score_thresh:
                     continue
                 category_id = self.dataset.contiguous_id_to_json[label]
+                # rescale bboxes
+                bbox[[0, 2]] *= width_scale
+                bbox[[1, 3]] *= height_scale
                 # convert [xmin, ymin, xmax, ymax]  to [xmin, ymin, w, h]
                 bbox[2:4] -= (bbox[:2] - 1)
                 self._results.append({'image_id': imgid,

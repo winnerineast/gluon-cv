@@ -16,12 +16,12 @@ class COCODetection(VisionDataset):
 
     Parameters
     ----------
-    root : str, default '~/mxnet/datasets/voc'
+    root : str, default '~/.mxnet/datasets/voc'
         Path to folder storing the dataset.
     splits : list of str, default ['instances_val2017']
         Json annotations name.
         Candidates can be: instances_val2017, instances_train2017.
-    transform : callable, defaut None
+    transform : callable, default None
         A function that takes data and label and transforms them. Refer to
         :doc:`./transforms` for examples.
 
@@ -30,6 +30,11 @@ class COCODetection(VisionDataset):
     min_object_area : float
         Minimum accepted ground-truth area, if an object's area is smaller than this value,
         it will be ignored.
+    skip_empty : bool, default is True
+        Whether skip images with no valid object. This should be `True` in training, otherwise
+        it will cause undefined behavior.
+    use_crowd : bool, default is True
+        Whether use boxes labeled as crowd instance.
 
     """
     CLASSES = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train',
@@ -47,11 +52,14 @@ class COCODetection(VisionDataset):
                'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
     def __init__(self, root=os.path.join('~', '.mxnet', 'datasets', 'coco'),
-                 splits=('instances_val2017',), transform=None, min_object_area=0):
+                 splits=('instances_val2017',), transform=None, min_object_area=0,
+                 skip_empty=True, use_crowd=True):
         super(COCODetection, self).__init__(root)
         self._root = os.path.expanduser(root)
         self._transform = transform
         self._min_object_area = min_object_area
+        self._skip_empty = skip_empty
+        self._use_crowd = use_crowd
         if isinstance(splits, mx.base.string_types):
             splits = [splits]
         self._splits = splits
@@ -123,8 +131,10 @@ class COCODetection(VisionDataset):
                 abs_path = os.path.join(self._root, dirname, filename)
                 if not os.path.exists(abs_path):
                     raise IOError('Image: {} not exists.'.format(abs_path))
-                items.append(abs_path)
                 label = self._check_load_bbox(_coco, entry)
+                if not label:
+                    continue
+                items.append(abs_path)
                 labels.append(label)
         return items, labels
 
@@ -141,6 +151,8 @@ class COCODetection(VisionDataset):
                 continue
             if obj.get('ignore', 0) == 1:
                 continue
+            if not self._use_crowd and obj.get('iscrowd', 0):
+                continue
             # convert from (x, y, w, h) to (xmin, ymin, xmax, ymax) and clip bound
             xmin, ymin, xmax, ymax = bbox_clip_xyxy(bbox_xywh_to_xyxy(obj['bbox']), width, height)
             # require non-zero box area
@@ -148,6 +160,7 @@ class COCODetection(VisionDataset):
                 contiguous_cid = self.json_id_to_contiguous[obj['category_id']]
                 valid_objs.append([xmin, ymin, xmax, ymax, contiguous_cid])
         if not valid_objs:
-            # dummy invalid labels if no valid objects are found
-            valid_objs.append([-1, -1, -1, -1, -1])
+            if not self._skip_empty:
+                # dummy invalid labels if no valid objects are found
+                valid_objs.append([-1, -1, -1, -1, -1])
         return valid_objs

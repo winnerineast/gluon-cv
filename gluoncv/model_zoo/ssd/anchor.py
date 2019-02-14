@@ -2,8 +2,8 @@
 """Anchor box generator for SSD detector."""
 from __future__ import absolute_import
 
-from mxnet import gluon
 import numpy as np
+from mxnet import gluon
 
 
 class SSDAnchorGenerator(gluon.HybridBlock):
@@ -21,7 +21,7 @@ class SSDAnchorGenerator(gluon.HybridBlock):
         Step size of anchor boxes.
     alloc_size : tuple of int
         Allocate size for the anchor boxes as (H, W).
-        Usually we generate large enough anchors, e.g. 100x100.
+        Usually we generate enough anchors for large feature map, e.g. 128x128.
         Later in inference we can have variable input sizes,
         at which time we can crop corresponding anchors from this large
         anchor map so we can skip re-generating anchors for each input.
@@ -41,7 +41,7 @@ class SSDAnchorGenerator(gluon.HybridBlock):
         self.anchors = self.params.get_constant('anchor_%d'%(index), anchors)
 
     def _generate_anchors(self, sizes, ratios, step, alloc_size, offsets):
-        """Generate anchors for once."""
+        """Generate anchors for once. Anchors are stored with (center_x, center_y, w, h) format."""
         assert len(sizes) == 2, "SSD requires sizes to be (size_min, size_max)"
         anchors = []
         for i in range(alloc_size[0]):
