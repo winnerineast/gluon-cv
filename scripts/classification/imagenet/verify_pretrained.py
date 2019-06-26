@@ -1,4 +1,4 @@
-import argparse, os, math
+import argparse, os, math, time, sys
 
 import mxnet as mx
 from mxnet import gluon, nd, image
@@ -23,8 +23,14 @@ def parse_args():
                         help='number of preprocessing workers')
     parser.add_argument('--model', type=str, required=True,
                         help='type of model to use. see vision_model for options.')
+    parser.add_argument('--quantized', action='store_true',
+                        help='use int8 pretrained model')
     parser.add_argument('--input-size', type=int, default=224,
                         help='input shape of the image, default is 224.')
+    parser.add_argument('--num-batches', type=int, default=100,
+                        help='run specified number of batches for inference')
+    parser.add_argument('--benchmark', action='store_true',
+                        help='use synthetic data to evalute benchmark')
     parser.add_argument('--crop-ratio', type=float, default=0.875,
                         help='The ratio for crop and input size, for validation dataset only')
     parser.add_argument('--params-file', type=str,
@@ -35,6 +41,18 @@ def parse_args():
                         help='use SE layers or not in resnext. default is false.')
     opt = parser.parse_args()
     return opt
+
+def benchmark(network, ctx, batch_size=64, image_size=224, num_iter=100, datatype='float32'):
+    input_shape = (batch_size, 3) + (image_size, image_size)
+    data = mx.random.uniform(-1.0, 1.0, shape=input_shape, ctx=ctx, dtype=datatype)
+    dryrun = 5
+    for i in range(num_iter+dryrun):
+        if i == dryrun:
+            tic = time.time()
+        output = network(data)
+        output.asnumpy()
+    toc = time.time() - tic
+    return toc
 
 if __name__ == '__main__':
     opt = parse_args()
@@ -50,6 +68,8 @@ if __name__ == '__main__':
 
     input_size = opt.input_size
     model_name = opt.model
+    if opt.quantized:
+        model_name = '_'.join((model_name, 'int8'))
     pretrained = True if not opt.params_file else False
 
     kwargs = {'ctx': ctx, 'pretrained': pretrained, 'classes': classes}
@@ -60,7 +80,18 @@ if __name__ == '__main__':
     net.cast(opt.dtype)
     if opt.params_file:
         net.load_parameters(opt.params_file, ctx=ctx)
-    net.hybridize()
+    if opt.quantized:
+        net.hybridize(static_alloc=True, static_shape=True)
+    else:
+        net.hybridize()
+    
+    if opt.benchmark:
+        print('-----benchmark mode for model %s-----'%opt.model)
+        time_cost = benchmark(network=net, ctx=ctx[0], image_size=opt.input_size, batch_size=opt.batch_size,
+            num_iter=opt.num_batches, datatype='float32')
+        fps = (opt.batch_size*opt.num_batches)/time_cost
+        print('With batch size %s, %s batches, inference performance is %.2f img/sec' % (opt.batch_size, opt.num_batches, fps)) 
+        sys.exit()
 
     acc_top1 = mx.metric.Accuracy()
     acc_top5 = mx.metric.TopKAccuracy(5)
@@ -86,6 +117,8 @@ if __name__ == '__main__':
         acc_top5.reset()
         if not opt.rec_dir:
             num_batch = len(val_data)
+        num = 0
+        start = time.time()
         for i, batch in enumerate(val_data):
             if mode == 'image':
                 data = gluon.utils.split_and_load(batch[0], ctx_list=ctx, batch_axis=0)
@@ -103,6 +136,10 @@ if __name__ == '__main__':
                 print('%d / %d : %.8f, %.8f'%(i, num_batch, 1-top1, 1-top5))
             else:
                 print('%d : %.8f, %.8f'%(i, 1-top1, 1-top5))
+            num += batch_size
+        end = time.time()
+        speed = num / (end - start)
+        print('Throughput is %f img/sec.'% speed)
 
         _, top1 = acc_top1.get()
         _, top5 = acc_top5.get()
@@ -118,7 +155,7 @@ if __name__ == '__main__':
         val_data = mx.io.ImageRecordIter(
             path_imgrec         = imgrec,
             path_imgidx         = imgidx,
-            preprocess_threads  = 30,
+            preprocess_threads  = num_workers,
             batch_size          = batch_size,
 
             resize              = resize,

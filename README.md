@@ -1,10 +1,10 @@
 # Gluon CV Toolkit
 
 [![Build Status](http://ci.mxnet.io/job/gluon-cv/job/master/badge/icon)](http://ci.mxnet.io/job/gluon-cv/job/master/)
-[![GitHub license](http://dmlc.github.io/img/apache2.svg)](./LICENSE)
+[![GitHub license](docs/_static/apache2.svg)](./LICENSE)
 [![Code Coverage](http://gluon-cv.mxnet.io/coverage.svg?)](http://gluon-cv.mxnet.io/coverage.svg)
 [![PyPI](https://img.shields.io/pypi/v/gluoncv.svg)](https://pypi.python.org/pypi/gluoncv)
-[![PyPI Pre-release](https://img.shields.io/badge/pypi--prerelease-v0.4.0-ff69b4.svg)](https://pypi.org/project/gluoncv/#history)
+[![PyPI Pre-release](https://img.shields.io/badge/pypi--prerelease-v0.5.0-ff69b4.svg)](https://pypi.org/project/gluoncv/#history)
 [![Downloads](http://pepy.tech/badge/gluoncv)](http://pepy.tech/project/gluoncv)
 
 | [Installation](http://gluon-cv.mxnet.io) | [Documentation](http://gluon-cv.mxnet.io) | [Tutorials](http://gluon-cv.mxnet.io) |
@@ -20,6 +20,16 @@ models. This toolkit offers four main features:
 3. Carefully designed APIs that greatly reduce the implementation complexity
 4. Community supports
 
+# Demo
+
+<div align="center">
+    <img src="docs/_static/short_demo.gif">
+</div>
+
+<br>
+
+Check the HD video at [Youtube](https://www.youtube.com/watch?v=nfpouVAzXt0) or [Bilibili](https://www.bilibili.com/video/av55619231).
+
 # Supported Applications
 
 | Application  | Illustration  | Available Models |
@@ -28,6 +38,7 @@ models. This toolkit offers four main features:
 | [Object Detection:](https://gluon-cv.mxnet.io/model_zoo/detection.html) <br/>detect multiple objects with their <br/> bounding boxes in an image.     |  <a href="https://gluon-cv.mxnet.io/model_zoo/detection.html"><img src="docs/_static/object-detection.png" alt="detection" height="200"/></a> | <a href="https://gluon-cv.mxnet.io/model_zoo/detection.html#faster-rcnn">Faster RCNN</a>, <a href="https://gluon-cv.mxnet.io/model_zoo/detection.html#ssd">SSD</a>, <a href="https://gluon-cv.mxnet.io/model_zoo/detection.html#yolo-v3">Yolo-v3</a> |
 | [Semantic Segmentation:](https://gluon-cv.mxnet.io/model_zoo/segmentation.html#semantic-segmentation) <br/>associate each pixel of an image <br/> with a categorical label. |  <a href="https://gluon-cv.mxnet.io/model_zoo/segmentation.html#semantic-segmentation"><img src="docs/_static/semantic-segmentation.png" alt="semantic" height="200"/></a> | <a href="https://gluon-cv.mxnet.io/model_zoo/segmentation.html#semantic-segmentation">FCN</a>, <a href="https://gluon-cv.mxnet.io/model_zoo/segmentation.html#semantic-segmentation">PSP</a>, <a href="https://gluon-cv.mxnet.io/model_zoo/segmentation.html#semantic-segmentation">DeepLab v3</a> |
 | [Instance Segmentation:](https://gluon-cv.mxnet.io/model_zoo/segmentation.html#instance-segmentation) <br/>detect objects and associate <br/> each pixel inside object area with an <br/> instance label. | <a href="https://gluon-cv.mxnet.io/model_zoo/segmentation.html#instance-segmentation"><img src="docs/_static/instance-segmentation.png" alt="instance" height="200"/></a> | <a href="https://gluon-cv.mxnet.io/model_zoo/segmentation.html#instance-segmentation">Mask RCNN</a>|
+| [Pose Estimation:](https://gluon-cv.mxnet.io/model_zoo/pose.html) <br/>detect human pose <br/> from images. | <a href="https://gluon-cv.mxnet.io/model_zoo/pose.html"><img src="docs/_static/pose-estimation.svg" alt="pose" height="200"/></a> | <a href="https://gluon-cv.mxnet.io/model_zoo/pose.html#simple-pose-with-resnet">Simple Pose</a>|
 | [GAN:](https://github.com/dmlc/gluon-cv/tree/master/scripts/gan) <br/>generate visually deceptive images | <a href="https://github.com/dmlc/gluon-cv/tree/master/scripts/gan"><img src="https://github.com/dmlc/gluon-cv/raw/master/scripts/gan/wgan/fake_samples_400000.png" alt="lsun" height="200"/></a> | <a href="https://github.com/dmlc/gluon-cv/tree/master/scripts/gan/wgan">WGAN</a>, <a href="https://github.com/dmlc/gluon-cv/tree/master/scripts/gan/cycle_gan">CycleGAN</a> |
 | [Person Re-ID:](https://github.com/dmlc/gluon-cv/tree/master/scripts/re-id/baseline) <br/>re-identify pedestrians across scenes | <a href="https://github.com/dmlc/gluon-cv/tree/master/scripts/re-id/baseline"><img src="https://user-images.githubusercontent.com/3307514/46702937-f4311800-cbd9-11e8-8eeb-c945ec5643fb.png" alt="re-id" height="160"/></a> |<a href="https://github.com/dmlc/gluon-cv/tree/master/scripts/re-id/baseline">Market1501 baseline</a> |
 
@@ -40,12 +51,12 @@ The following commands install the stable version of GluonCV and MXNet:
 
 ```bash
 pip install gluoncv --upgrade
-pip install mxnet --upgrade
+pip install mxnet-mkl --upgrade
 # if cuda 9.2 is installed
-pip install mxnet-cu92 --upgrade
+pip install mxnet-cu92mkl --upgrade
 ```
 
-**The latest stable version of GluonCV is 0.3 and depends on mxnet >= 1.3.0**
+**The latest stable version of GluonCV is 0.4 and depends on mxnet >= 1.4.0**
 
 ## Nightly Release
 
@@ -53,9 +64,9 @@ You may get access to latest features and bug fixes with the following commands 
 
 ```bash
 pip install gluoncv --pre --upgrade
-pip install mxnet --pre --upgrade
+pip install mxnet-mkl --pre --upgrade
 # if cuda 9.2 is installed
-pip install mxnet-cu92 --pre --upgrade
+pip install mxnet-cu92mkl --pre --upgrade
 ```
 
 There are multiple versions of MXNet pre-built package available. Please refer to [mxnet packages](https://gluon-crash-course.mxnet.io/mxnet_packages.html) if you need more details about MXNet versions.
@@ -88,7 +99,9 @@ Check out how to use GluonCV for your own research or projects.
 - For advanced examples, check out our [Scripts](http://gluon-cv.mxnet.io/master/scripts/index.html).
 - For experienced users, check out our [API Notes](https://gluon-cv.mxnet.io/api/data.datasets.html#).
 
-If you use our code or models in your research, please cite with:
+# Citation
+
+If you feel our code or models helps in your research, please kindly cite our papers:
 
 ```
 @article{he2018bag,
@@ -97,4 +110,10 @@ If you use our code or models in your research, please cite with:
   journal={arXiv preprint arXiv:1812.01187},
   year={2018}
 }
-```
+
+@article{zhang2019bag,
+  title={Bag of Freebies for Training Object Detection Neural Networks},
+  author={Zhang, Zhi and He, Tong and Zhang, Hang and Zhang, Zhongyue and Xie, Junyuan and Li, Mu},
+  journal={arXiv preprint arXiv:1902.04103},
+  year={2019}
+}```

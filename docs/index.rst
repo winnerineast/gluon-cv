@@ -1,6 +1,16 @@
 GluonCV: a Deep Learning Toolkit for Computer Vision
 ========================================================
 
+.. toctree::
+    :maxdepth: 2
+    :hidden:
+
+    model_zoo/index
+    tutorials/index    
+    api/index    
+    how_to/index    
+    slides
+
 GluonCV provides implementations of state-of-the-art (SOTA) deep learning algorithms in computer vision. It aims to help engineers, researchers, and students quickly prototype products, validate new ideas and learn computer vision.
 
 GluonCV features:
@@ -12,6 +22,20 @@ GluonCV features:
 3. carefully designed APIs and easy to understand implementations,
 
 4. community support.
+
+Demo
+----
+
+.. raw:: html
+
+    <div align="center">
+        <img src="_static/short_demo.gif">
+    </div>
+
+    <br>
+
+
+Check the HD video at `Youtube <https://www.youtube.com/watch?v=nfpouVAzXt0>`_ or `Bilibili <https://www.bilibili.com/video/av55619231>`_.
 
 Supported Applications
 ----------------------
@@ -35,11 +59,11 @@ command installs CPU version of MXNet.
 
 .. code-block:: bash
 
-   # the oldest stable version of mxnet required is 1.3.0
-   pip install mxnet>=1.3.0 --upgrade
+   # the oldest stable version of mxnet required is 1.4.0
+   pip install mxnet-mkl>=1.4.0 --upgrade
 
    # you can install nightly build of mxnet to access up-to-date features
-   pip install --pre --upgrade mxnet
+   pip install --pre --upgrade mxnet-mkl
 
 .. note::
 
@@ -88,11 +112,10 @@ New to Deep Learning or CV?
 
 For background knowledge of deep learning or CV, please refer to the open source book `Dive into Deep Learning <http://en.diveintodeeplearning.org/>`_.
 
+Adoptions
+---------
 
-.. toctree::
-   :maxdepth: 2
+Companies and organizations using GluonCV:
 
-   model_zoo/index
-   tutorials/index
-   api/index
-   how_to/index
+.. include:: /_static/logos/embed.html
+
